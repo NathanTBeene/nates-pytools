@@ -182,7 +182,7 @@ def generate_diff_report(diff, mode, file1_path, file2_path):
   report_lines.extend([
     "CSV Diff Report",
     f"Generated: {timestamp}",
-    "Tool: CSV Differ v1.0 by Nathan T. Beene",
+    "Tool: CSV Differ by Nathan T. Beene",
     "=" * 60,
     f"File A: {file1_path.absolute()}",
     f"File B: {file2_path.absolute()}",
