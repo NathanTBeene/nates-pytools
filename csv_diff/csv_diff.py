@@ -34,6 +34,7 @@ def parse_arguments():
     parser.add_argument("-c", "--count", action="store_true", help="Count the number of differing rows.")
     return parser.parse_args()
 
+
 def check_output_directory(output_path):
     """
     Checks if the specified output directory exists, and prompts the user to create it if it does not.
@@ -53,6 +54,7 @@ def check_output_directory(output_path):
           print("Output directory creation declined. Exiting.")
           sys.exit(1)
 
+
 def get_proper_output_path(base_path):
     """
     Returns an absolute output path based on the given base_path.
@@ -71,6 +73,7 @@ def get_proper_output_path(base_path):
     else:
         return Path.cwd() / base_path
 
+
 def read_csv(file_path):
     """
     Reads a CSV file and returns its contents as a list of rows.
@@ -87,77 +90,152 @@ def read_csv(file_path):
     """
     with open(file_path, newline='', encoding='utf-8') as csvfile:
         return list(csv.reader(csvfile))
-  
-def literal_diff(file1_lines, file2_lines):
-    """
-    Compares two lists of lines and returns their unified diff.
-
-    Args:
-      file1_lines (list of str): Lines from the first file.
-      file2_lines (list of str): Lines from the second file.
-
-    Returns:
-      list of str: The unified diff between the two lists of lines, formatted as strings.
-    """
-    d = difflib.unified_diff(
-        file1_lines,
-        file2_lines,
-        fromfile='file1',
-        tofile='file2',
-        lineterm=''
-    )
-    return list(d)
 
 
-def entry_diff(file1_lines, file2_lines):
-    """
-    Compares two lists of entries and returns a report of differences.
-    Args:
-      file1_lines (list): List of entries from the first file.
-      file2_lines (list): List of entries from the second file.
-    Returns:
-      dict: A dictionary with two keys:
-        - "file1_only": Entries present only in file1_lines.
-        - "file2_only": Entries present only in file2_lines.
-    """
-    diff_report = {
-        "file1_only": [],
-        "file2_only": []
+def literal_diff(file1_lines, file2_lines, file1_path, file2_path):
+  """
+  Performs a line-by-line (literal) diff between two CSV files using difflib.
+
+  Args:
+    file1_lines (list): List of rows from the first CSV file.
+    file2_lines (list): List of rows from the second CSV file.
+    file1_path (Path): Path to the first CSV file.
+    file2_path (Path): Path to the second CSV file.
+
+  Returns:
+    list: List of strings representing the unified diff output.
+  """
+
+  # Convert CSV rows to strings for difflib
+  file1_strings = [','.join(row) for row in file1_lines]
+  file2_strings = [','.join(row) for row in file2_lines]
+
+  # Get file modification times
+  file1_time = datetime.fromtimestamp(file1_path.stat().st_mtime).isoformat()
+  file2_time = datetime.fromtimestamp(file2_path.stat().st_mtime).isoformat()
+
+  diff = difflib.unified_diff(
+    file1_strings,
+    file2_strings,
+    fromfile=f"a/{file1_path.name}\t{file1_time}",
+    tofile=f"b/{file2_path.name}\t{file2_time}",
+    lineterm='',
+    n=3  # context lines
+  )
+  return list(diff)
+
+
+def entry_diff(file1_lines, file2_lines, file1_path, file2_path):
+  """
+  Performs an entry-wise diff between two CSV files, returning unique and common rows with statistics.
+
+  Args:
+    file1_lines (list): List of rows from the first CSV file.
+    file2_lines (list): List of rows from the second CSV file.
+    file1_path (Path): Path to the first CSV file.
+    file2_path (Path): Path to the second CSV file.
+
+  Returns:
+    dict: Contains lists of unique and common rows, and statistics.
+  """
+  file1_set = set(tuple(row) for row in file1_lines)
+  file2_set = set(tuple(row) for row in file2_lines)
+
+  only_in_file1 = file1_set - file2_set
+  only_in_file2 = file2_set - file1_set
+  common = file1_set & file2_set
+
+  return {
+    "file1_only": [list(row) for row in sorted(only_in_file1)],
+    "file2_only": [list(row) for row in sorted(only_in_file2)],
+    "common": [list(row) for row in sorted(common)],
+    "stats": {
+      "file1_total": len(file1_lines),
+      "file2_total": len(file2_lines),
+      "common_count": len(common),
+      "file1_unique": len(only_in_file1),
+      "file2_unique": len(only_in_file2)
     }
-    for entry in file1_lines:
-        if entry not in file2_lines:
-            diff_report["file1_only"].append(entry)
-
-    for entry in file2_lines:
-        if entry not in file1_lines:
-            diff_report["file2_only"].append(entry)
-
-    return diff_report
+  }
 
 
-def generate_diff_report(diff, mode):
-    """
-    Generates a formatted difference report between two CSV files based on the specified mode.
+def generate_diff_report(diff, mode, file1_path, file2_path):
+  """
+  Generates a formatted report summarizing the differences between two CSV files.
+  Args:
+    diff (dict or list): The difference data between the two CSV files. 
+      - If mode is "literal", this should be a list of string differences.
+      - If mode is "entry", this should be a dictionary containing:
+        - "stats": dict with statistics about the comparison.
+        - "file1_only": list of rows unique to file1.
+        - "file2_only": list of rows unique to file2.
+    mode (str): The report mode, either "literal" for line-by-line differences or "entry" for row-based comparison.
+    file1_path (Path): Path object for the first CSV file.
+    file2_path (Path): Path object for the second CSV file.
+  Returns:
+    str: A multi-line string containing the formatted diff report.
+  """
+  timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+  report_lines = []
 
-    Args:
-      diff (list or dict): The differences between two CSV files. If mode is "literal", this should be a list of strings.
-        If mode is "entry", this should be a dictionary with keys "file1_only" and "file2_only", each containing lists of entries.
-      mode (str): The report mode. Can be "literal" to output raw diff lines, or "entry" to output entries unique to each file.
+  # Add header
+  report_lines.extend([
+    "CSV Diff Report",
+    f"Generated: {timestamp}",
+    "Tool: CSV Differ v1.0 by Nathan T. Beene",
+    "=" * 60,
+    f"File A: {file1_path.absolute()}",
+    f"File B: {file2_path.absolute()}",
+    "=" * 60,
+    ""
+  ])
 
-    Returns:
-      str: A string containing the formatted difference report.
-    """
-    report_lines = []
-    if mode == "literal":
-        report_lines.extend(diff)
-    elif mode == "entry":
-        report_lines.append("Entries only in file 1:")
-        for entry in diff["file1_only"]:
-            report_lines.append(','.join(entry))
-        report_lines.append("\nEntries only in file 2:")
-        for entry in diff["file2_only"]:
-            report_lines.append(','.join(entry))
-    return '\n'.join(report_lines)
+  if mode == "literal":
+    if not diff:
+      report_lines.append("No differences found.")
+    else:
+      report_lines.extend(diff)
+
+  elif mode == "entry":
+    stats = diff.get("stats", {})
+
+    # Add statistics section
+    report_lines.extend([
+      "STATISTICS:",
+      f"  File A total rows: {stats.get('file1_total', 0)}",
+      f"  File B total rows: {stats.get('file2_total', 0)}",
+      f"  Common rows: {stats.get('common_count', 0)}",
+      f"  Unique to File A: {stats.get('file1_unique', 0)}",
+      f"  Unique to File B: {stats.get('file2_unique', 0)}",
+      "",
+      "-" * 60,
+      ""
+    ])
+
+    # Rows only in File A
+    if diff["file1_only"]:
+      report_lines.extend([
+        f"ROWS ONLY IN FILE A ({len(diff['file1_only'])} rows):",
+        "-" * 40
+      ])
+      for i, entry in enumerate(diff["file1_only"], 1):
+        report_lines.append(f"- [{i:4d}] {', '.join(str(cell) for cell in entry)}")
+      report_lines.append("")
+
+    # Rows only in File B
+    if diff["file2_only"]:
+      report_lines.extend([
+        f"ROWS ONLY IN FILE B ({len(diff['file2_only'])} rows):",
+        "-" * 40
+      ])
+      for i, entry in enumerate(diff["file2_only"], 1):
+        report_lines.append(f"+ [{i:4d}] {', '.join(str(cell) for cell in entry)}")
+      report_lines.append("")
+
+    if not diff["file1_only"] and not diff["file2_only"]:
+      report_lines.append("No differences found - files are identical.")
+
+  return "\n".join(report_lines)
 
 def check_file_types(file1, file2):
     """
@@ -204,16 +282,15 @@ def main():
         print("Generating entry-wise difference report...")
     
     check_file_types(args.file1, args.file2)
-    check_output_directory(get_proper_output_path(args.output))
 
     file1_lines = read_csv(args.file1)
     file2_lines = read_csv(args.file2)
 
     if args.mode == "entry":
-        diff = entry_diff(file1_lines, file2_lines)
+        diff = entry_diff(file1_lines, file2_lines, args.file1, args.file2)
     elif args.mode == "literal" or not args.mode:
         # Default to literal diff if mode is unknown
-        diff = literal_diff(file1_lines, file2_lines)
+        diff = literal_diff(file1_lines, file2_lines, args.file1, args.file2)
     else:
         print(f"Error: Unknown mode {args.mode}")
         sys.exit(1)
@@ -224,11 +301,13 @@ def main():
 
     if args.verbose:
         print("Difference report generated.")
+    
+    check_output_directory(get_proper_output_path(args.output))
 
     if args.output:
-        output_file = get_proper_output_path(args.output) / f"diff_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        output_file = get_proper_output_path(args.output) / f"diff_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.diff"
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(generate_diff_report(diff, args.mode))
+            f.write(generate_diff_report(diff, args.mode, args.file1, args.file2))
         if args.verbose:
             print(f"Difference report saved to {output_file}")
 
