@@ -272,20 +272,49 @@ def main():
     Exits with an error if an unknown mode is specified.
     """
     args = parse_arguments()
-    if args.verbose:
-        print(f"Comparing {args.file1} and {args.file2}")
-    if args.count:
-        print("Counting differing rows...")
-    if args.mode == "literal":
-        print("Generating literal difference report...")
-    elif args.mode == "entry":
-        print("Generating entry-wise difference report...")
     
+    # Print header
+    if args.verbose:
+        print("--------------------------------------------------")
+        print("|               CSV Differ Tool                   |")
+        print("|             by Nathan T. Beene                  |")
+        print("--------------------------------------------------")
+        print(f"  Mode: {args.mode}")
+        print(f"    - File A: {args.file1.absolute()}")
+        print(f"    - File B: {args.file2.absolute()}")
+        print()
+        print(f"  Output directory: {get_proper_output_path(args.output).absolute()}")
+        print("--------------------------------------------------")
+    else:
+        print("CSV Differ Tool")
+        print(f"Comparing files using {args.mode} mode")
+        print()
+    
+    # Validate files
+    if args.verbose:
+        print("Validating file types...", end="")
     check_file_types(args.file1, args.file2)
+    if args.verbose:
+        print("done.")
+        print()
 
+    # Read CSV files
+    if args.verbose:
+        print("Reading CSV files...", end="")
     file1_lines = read_csv(args.file1)
     file2_lines = read_csv(args.file2)
+    if args.verbose:
+        print("done.")
+        print(f"  - File A: {len(file1_lines)} rows")
+        print(f"  - File B: {len(file2_lines)} rows")
+        print()
 
+    # Perform comparison
+    if args.verbose:
+        print("Analyzing differences...", end="")
+    else:
+        print("Analyzing differences...")
+    
     if args.mode == "entry":
         diff = entry_diff(file1_lines, file2_lines, args.file1, args.file2)
     elif args.mode == "literal" or not args.mode:
@@ -295,12 +324,68 @@ def main():
         print(f"Error: Unknown mode {args.mode}")
         sys.exit(1)
 
+    if args.verbose:
+        print("done.")
+        print("--------------------------------------------------")
+
+    # Check for differences and provide summary
     if not diff or (args.mode == "entry" and not diff["file1_only"] and not diff["file2_only"]):
-        print("No differences found.")
+        print("Analysis complete:")
+        print("  No differences found - files are identical.")
         return
 
+    # Report findings
+    if args.mode == "entry":
+        stats = diff.get("stats", {})
+        print("Analysis complete:")
+        print(f"  Common rows: {stats.get('common_count', 0)}")
+        print(f"  Unique to File A: {stats.get('file1_unique', 0)}")
+        print(f"  Unique to File B: {stats.get('file2_unique', 0)}")
+        
+        if args.verbose:
+            if diff["file1_only"]:
+                print(f"  Examples from File A only:")
+                for i, row in enumerate(diff["file1_only"][:3], 1):
+                    row_text = ", ".join(str(cell) for cell in row)
+                    if len(row_text) > 150:
+                        row_text = row_text[:150] + "..."
+                    print(f"    {i}. {row_text}")
+                if len(diff["file1_only"]) > 3:
+                    print(f"    ... and {len(diff['file1_only']) - 3} more")
+            
+            if diff["file2_only"]:
+                print(f"  Examples from File B only:")
+                for i, row in enumerate(diff["file2_only"][:3], 1):
+                    row_text = ", ".join(str(cell) for cell in row)
+                    if len(row_text) > 150:
+                        row_text = row_text[:150] + "..."
+                    print(f"    {i}. {row_text}")
+                if len(diff["file2_only"]) > 3:
+                    print(f"    ... and {len(diff['file2_only']) - 3} more")
+    else:
+        # Literal mode
+        diff_count = len([line for line in diff if line.startswith('+') or line.startswith('-')])
+        print(f"Analysis complete: {diff_count} lines differ")
+        
+        if args.verbose and diff:
+            print("  Sample differences:")
+            shown = 0
+            for line in diff:
+                if (line.startswith('+') or line.startswith('-')) and shown < 5:
+                    print(f"    {line[:100]}{'...' if len(line) > 100 else ''}")
+                    shown += 1
+                if shown >= 5:
+                    remaining = sum(1 for l in diff if l.startswith('+') or l.startswith('-')) - 5
+                    if remaining > 0:
+                        print(f"    ... and {remaining} more differences")
+                    break
+
     if args.verbose:
-        print("Difference report generated.")
+        print("--------------------------------------------------")
+
+    # Generate and save report
+    if args.verbose:
+        print("Generating detailed report...")
     
     check_output_directory(get_proper_output_path(args.output))
 
@@ -309,10 +394,18 @@ def main():
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(generate_diff_report(diff, args.mode, args.file1, args.file2))
         if args.verbose:
-            print(f"Difference report saved to {output_file}")
+            print(f"  Report saved: {output_file.name}")
+        else:
+            print(f"Report saved: {output_file.name}")
 
     if args.count:
-        print(f"Total differing rows: {len(diff)}")
+        if args.mode == "entry":
+            stats = diff.get("stats", {})
+            total_diff = stats.get('file1_unique', 0) + stats.get('file2_unique', 0)
+            print(f"Total differing rows: {total_diff}")
+        else:
+            diff_lines = len([line for line in diff if line.startswith('+') or line.startswith('-')])
+            print(f"Total differing lines: {diff_lines}")
 
 if __name__ == "__main__":
     main()
