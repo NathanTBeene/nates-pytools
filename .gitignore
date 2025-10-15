@@ -1,0 +1,11 @@
+# Ignore all files by default
+# This way using the tools within this repo won't accidentally add unwanted files to version control.
+*
+
+# But not these file types
+!*.py
+!.md
+!.gitignore
+
+# Don't ignore directories, so we can still track files within them
+!*/
