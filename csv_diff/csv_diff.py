@@ -7,7 +7,7 @@ import difflib
 
 #################################
 ###      CSV DIFFER TOOL      ###
-## Created by: Nathan T. Beene ##
+## Created by: aten.dev        ##
 #################################
 
 def parse_arguments():
@@ -163,7 +163,7 @@ def generate_diff_report(diff, mode, file1_path, file2_path):
   """
   Generates a formatted report summarizing the differences between two CSV files.
   Args:
-    diff (dict or list): The difference data between the two CSV files. 
+    diff (dict or list): The difference data between the two CSV files.
       - If mode is "literal", this should be a list of string differences.
       - If mode is "entry", this should be a dictionary containing:
         - "stats": dict with statistics about the comparison.
@@ -272,13 +272,13 @@ def main():
     Exits with an error if an unknown mode is specified.
     """
     args = parse_arguments()
-    
+
     # Print header
     if args.verbose:
-        print("--------------------------------------------------")
+        print("---------------------------------------------------")
         print("|               CSV Differ Tool                   |")
-        print("|             by Nathan T. Beene                  |")
-        print("--------------------------------------------------")
+        print("|             by aten.dev                         |")
+        print("---------------------------------------------------")
         print(f"  Mode: {args.mode}")
         print(f"    - File A: {args.file1.absolute()}")
         print(f"    - File B: {args.file2.absolute()}")
@@ -289,7 +289,7 @@ def main():
         print("CSV Differ Tool")
         print(f"Comparing files using {args.mode} mode")
         print()
-    
+
     # Validate files
     if args.verbose:
         print("Validating file types...", end="")
@@ -314,7 +314,7 @@ def main():
         print("Analyzing differences...", end="")
     else:
         print("Analyzing differences...")
-    
+
     if args.mode == "entry":
         diff = entry_diff(file1_lines, file2_lines, args.file1, args.file2)
     elif args.mode == "literal" or not args.mode:
@@ -341,7 +341,7 @@ def main():
         print(f"  Common rows: {stats.get('common_count', 0)}")
         print(f"  Unique to File A: {stats.get('file1_unique', 0)}")
         print(f"  Unique to File B: {stats.get('file2_unique', 0)}")
-        
+
         if args.verbose:
             if diff["file1_only"]:
                 print(f"  Examples from File A only:")
@@ -352,7 +352,7 @@ def main():
                     print(f"    {i}. {row_text}")
                 if len(diff["file1_only"]) > 3:
                     print(f"    ... and {len(diff['file1_only']) - 3} more")
-            
+
             if diff["file2_only"]:
                 print(f"  Examples from File B only:")
                 for i, row in enumerate(diff["file2_only"][:3], 1):
@@ -366,7 +366,7 @@ def main():
         # Literal mode
         diff_count = len([line for line in diff if line.startswith('+') or line.startswith('-')])
         print(f"Analysis complete: {diff_count} lines differ")
-        
+
         if args.verbose and diff:
             print("  Sample differences:")
             shown = 0
@@ -386,7 +386,7 @@ def main():
     # Generate and save report
     if args.verbose:
         print("Generating detailed report...")
-    
+
     check_output_directory(get_proper_output_path(args.output))
 
     if args.output:
